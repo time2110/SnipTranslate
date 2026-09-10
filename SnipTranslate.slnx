@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SnipTranslate.App/SnipTranslate.App.csproj" />
+    <Project Path="src/SnipTranslate.OcrWorker/SnipTranslate.OcrWorker.csproj" />
+  </Folder>
+</Solution>

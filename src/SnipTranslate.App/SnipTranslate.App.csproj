@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>SnipTranslate</AssemblyName>
+    <RootNamespace>SnipTranslate</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <Target Name="BuildOcrWorker" BeforeTargets="Build">
+    <MSBuild Projects="..\SnipTranslate.OcrWorker\SnipTranslate.OcrWorker.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)" />
+  </Target>
+
+  <Target Name="CopyOcrWorker" AfterTargets="Build">
+    <ItemGroup>
+      <OcrWorkerFiles Include="..\SnipTranslate.OcrWorker\bin\$(Configuration)\net10.0\*.*" />
+      <OcrModelFiles Include="..\SnipTranslate.OcrWorker\bin\$(Configuration)\net10.0\models\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OcrWorkerFiles)"
+          DestinationFolder="$(OutDir)ocr"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(OcrModelFiles)"
+          DestinationFolder="$(OutDir)ocr\models"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

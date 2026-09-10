@@ -1,0 +1,87 @@
+<Window x:Class="SnipTranslate.Settings.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SnipTranslate 设置"
+        Width="460"
+        Height="555"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="#F8FAFC">
+  <Grid Margin="24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="115" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+
+    <TextBlock Grid.ColumnSpan="2" Text="翻译与代理" FontSize="22" FontWeight="SemiBold" Foreground="#172033" Margin="0,0,0,20" />
+
+    <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="代理模式" />
+    <ComboBox x:Name="ProxyModeBox" Grid.Row="1" Grid.Column="1" Height="30" SelectionChanged="OnProxyModeChanged">
+      <ComboBoxItem Content="跟随 Windows 系统代理" />
+      <ComboBoxItem Content="不使用代理" />
+      <ComboBoxItem Content="自定义代理" />
+    </ComboBox>
+
+    <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="代理协议" Margin="0,12,0,0" />
+    <ComboBox x:Name="ProxySchemeBox" Grid.Row="2" Grid.Column="1" Height="30" Margin="0,12,0,0">
+      <ComboBoxItem Content="http" />
+      <ComboBoxItem Content="https" />
+      <ComboBoxItem Content="socks5" />
+    </ComboBox>
+
+    <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="主机" Margin="0,12,0,0" />
+    <TextBox x:Name="ProxyHostBox" Grid.Row="3" Grid.Column="1" Height="30" Margin="0,12,0,0" Padding="6,3" />
+
+    <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="端口" Margin="0,12,0,0" />
+    <TextBox x:Name="ProxyPortBox" Grid.Row="4" Grid.Column="1" Height="30" Margin="0,12,0,0" Padding="6,3" />
+
+    <TextBlock Grid.Row="5" VerticalAlignment="Center" Text="用户名" Margin="0,12,0,0" />
+    <TextBox x:Name="ProxyUsernameBox" Grid.Row="5" Grid.Column="1" Height="30" Margin="0,12,0,0" Padding="6,3" />
+
+    <TextBlock Grid.Row="6" VerticalAlignment="Center" Text="密码" Margin="0,12,0,0" />
+    <PasswordBox x:Name="ProxyPasswordBox" Grid.Row="6" Grid.Column="1" Height="30" Margin="0,12,0,0" Padding="6,3" />
+
+    <TextBlock Grid.Row="7" VerticalAlignment="Center" Text="目标语言" Margin="0,12,0,0" />
+    <ComboBox x:Name="TargetLanguageBox" Grid.Row="7" Grid.Column="1" Height="30" Margin="0,12,0,0">
+      <ComboBoxItem Content="简体中文" Tag="zh-CN" />
+      <ComboBoxItem Content="繁体中文" Tag="zh-TW" />
+      <ComboBoxItem Content="英语" Tag="en" />
+      <ComboBoxItem Content="日语" Tag="ja" />
+      <ComboBoxItem Content="韩语" Tag="ko" />
+    </ComboBox>
+
+    <Border Grid.Row="8"
+            Grid.ColumnSpan="2"
+            Margin="0,18,0,12"
+            MinHeight="72"
+            Padding="11,9"
+            CornerRadius="6"
+            Background="#EEF2F7"
+            BorderBrush="#CBD5E1"
+            BorderThickness="1">
+      <TextBlock x:Name="StatusText"
+                 VerticalAlignment="Top"
+                 Text="点击“测试 Google”检查当前网络和代理配置。"
+                 TextWrapping="Wrap"
+                 Foreground="#475569" />
+    </Border>
+
+    <StackPanel Grid.Row="9" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="TestButton" Content="测试 Google" Padding="14,7" Margin="0,0,8,0" Click="OnTestClick" />
+      <Button Content="保存" Padding="18,7" Margin="0,0,8,0" Click="OnSaveClick" />
+      <Button Content="取消" Padding="18,7" Click="OnCancelClick" />
+    </StackPanel>
+  </Grid>
+</Window>

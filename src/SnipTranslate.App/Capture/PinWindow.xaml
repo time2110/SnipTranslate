@@ -1,0 +1,18 @@
+<Window x:Class="SnipTranslate.Capture.PinWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        SizeToContent="WidthAndHeight"
+        Background="Transparent"
+        AllowsTransparency="True"
+        MouseLeftButtonDown="OnMouseLeftButtonDown"
+        MouseWheel="OnMouseWheel"
+        MouseRightButtonUp="OnMouseRightButtonUp">
+  <Border BorderBrush="#5538BDF8" BorderThickness="1" Background="White">
+    <Image x:Name="PinnedImage" Stretch="Fill" />
+  </Border>
+</Window>
+
