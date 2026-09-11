@@ -165,37 +165,22 @@ public partial class CaptureWindow : Window
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var key = EffectiveKey(e);
+        if (key == Key.Escape)
+        {
+            e.Handled = true;
+            _requestCancellation?.Cancel();
+            _closeAll();
+            return;
+        }
+
         if (_textEditor is not null)
         {
-            if (key == Key.Escape)
-            {
-                e.Handled = true;
-                CancelTextEditor();
-            }
-            else if (key == Key.Enter && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            if (key == Key.Enter && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
             {
                 e.Handled = true;
                 CommitTextEditor();
             }
 
-            return;
-        }
-
-        if (key == Key.Escape)
-        {
-            e.Handled = true;
-            if (_surface.CancelTool())
-            {
-                SetAnnotationTool(AnnotationTool.Select);
-                return;
-            }
-
-            if (ResultPanel.Visibility == Visibility.Visible)
-            {
-                ResultPanel.Visibility = Visibility.Collapsed;
-                return;
-            }
-            _closeAll();
             return;
         }
 
@@ -654,10 +639,14 @@ public partial class CaptureWindow : Window
             : requestedTarget;
 
         TranslatedText.Text = "正在翻译…";
-        ResultStatusText.Text = $"Google · {LanguageLabel(source == "auto" ? detected : source)} → {LanguageLabel(target)}";
-        var translated = await _translator.TranslateAsync(text, source, target, cancellationToken);
+        ResultStatusText.Text = $"翻译中 · {LanguageLabel(source == "auto" ? detected : source)} → {LanguageLabel(target)}";
+        var effectiveSource = source == "auto" ? detected : source;
+        var translated = await _translator.TranslateAsync(text, effectiveSource, target, cancellationToken);
         TranslatedText.Text = translated;
-        ResultStatusText.Text = $"完成 · {LanguageLabel(source == "auto" ? detected : source)} → {LanguageLabel(target)}";
+        var service = _translator as TranslationService;
+        var fallback = service?.LastFallbackOccurred == true ? "（自动切换）" : string.Empty;
+        var provider = service?.LastProviderName ?? "翻译完成";
+        ResultStatusText.Text = $"{provider}{fallback} · {LanguageLabel(source == "auto" ? detected : source)} → {LanguageLabel(target)}";
     }
 
     private async void OnLanguageChanged(object sender, SelectionChangedEventArgs e)

@@ -47,7 +47,9 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 [Icons]
 Name: "{group}\SnipTranslate"; Filename: "{app}\{#AppExeName}"
 Name: "{autodesktop}\SnipTranslate"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
-Name: "{userstartup}\SnipTranslate"; Filename: "{app}\{#AppExeName}"; Tasks: startup
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SnipTranslate"; ValueData: """{app}\{#AppExeName}"" --startup"; Tasks: startup; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "启动 SnipTranslate"; Flags: nowait postinstall skipifsilent

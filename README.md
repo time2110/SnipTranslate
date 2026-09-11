@@ -2,7 +2,7 @@
 
 Windows 原生的极速截图、贴图、OCR 与翻译工具。
 
-当前开发阶段：可运行的截图 + 贴图 + RapidOCR + Google 翻译 MVP。
+当前开发阶段：可运行的截图 + 贴图 + RapidOCR + 多服务翻译 MVP。
 
 ## 默认快捷键
 
@@ -14,6 +14,7 @@ Windows 原生的极速截图、贴图、OCR 与翻译工具。
 - `Esc`：取消
 - `O`：识别当前选区
 - `T`：识别并翻译当前选区
+- `Esc`：立即退出整套截图/OCR/翻译界面
 
 ## 已实现
 
@@ -28,8 +29,11 @@ Windows 原生的极速截图、贴图、OCR 与翻译工具。
 - 基于识别框坐标的行序与段落整理
 - 截图选区旁内嵌 OCR/翻译结果卡片，不切换窗口
 - 默认自动识别中文/英文并互译，也可手动选择中、英、日、韩语言
-- Google Web 翻译，支持直接复制原文或译文
+- Google Web、微软/Bing Translator、LibreTranslate、MyMemory 和自定义 HTTP API
+- 翻译 API 可新增、独立编辑、启用/停用、删除和拖动排序；失败时按顺序自动切换
+- 支持直接复制原文或译文；默认按中英文自动互译
 - 系统代理、直连、自定义 HTTP/HTTPS/SOCKS5 代理
+- 设置中可随时开启或关闭当前用户的开机自启动
 - 代理密码使用 Windows DPAPI 加密
 
 ## 构建
@@ -47,7 +51,9 @@ Windows 原生的极速截图、贴图、OCR 与翻译工具。
 .\src\SnipTranslate.App\bin\Debug\net10.0-windows\SnipTranslate.exe
 ```
 
-托盘右键打开设置，可选择 Google 翻译目标语言和代理。Google Web 是非正式接口，可能发生限流或协议变化。
+托盘右键打开设置，可选择翻译服务、目标语言和代理。Google Web 与 MyMemory 无需 Key；微软/Bing 使用 Azure Translator Key；LibreTranslate 支持公共或自建实例。Google Web 是非正式接口，可能发生限流或协议变化。
+
+自定义 HTTP API 使用 `POST application/json`。请求模板支持 `{text}`、`{source}`、`{target}` 占位符，响应路径支持点号与数组下标，例如 `data.translatedText` 或 `0.translations.0.text`。API Key 可配置到任意请求头。
 
 ## 生成 Windows 安装包
 
