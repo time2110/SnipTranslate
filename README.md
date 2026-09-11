@@ -49,4 +49,14 @@ Windows 原生的极速截图、贴图、OCR 与翻译工具。
 
 托盘右键打开设置，可选择 Google 翻译目标语言和代理。Google Web 是非正式接口，可能发生限流或协议变化。
 
+## 生成 Windows 安装包
+
+一条命令生成自包含的 Windows x64 安装程序：
+
+```powershell
+.\scripts\Package.ps1
+```
+
+详细说明见 [安装包制作与使用](docs/安装包制作与使用.md)。
+
 模型来源：[RapidAI/RapidOCRCSharp](https://github.com/RapidAI/RapidOCRCSharp)，许可证见上游项目。
