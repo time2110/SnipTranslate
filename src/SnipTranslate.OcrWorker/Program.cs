@@ -40,10 +40,13 @@ internal static class Program
             value.Equals("--image", StringComparison.OrdinalIgnoreCase));
         if (imageOption >= 0 && imageOption + 1 < args.Length)
         {
+            var languageOption = Array.FindIndex(args, value =>
+                value.Equals("--language", StringComparison.OrdinalIgnoreCase));
+            var language = languageOption >= 0 && languageOption + 1 < args.Length ? args[languageOption + 1] : "auto";
             await using var engine = new OcrEngine();
             await engine.InitializeAsync();
             var response = await engine.RecognizeAsync(
-                new OcrRequest(Guid.NewGuid().ToString("N"), args[imageOption + 1]),
+                new OcrRequest(Guid.NewGuid().ToString("N"), args[imageOption + 1], language, true),
                 CancellationToken.None);
             Console.WriteLine(JsonSerializer.Serialize(response));
             return response.Success ? 0 : 1;

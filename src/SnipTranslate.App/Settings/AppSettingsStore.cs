@@ -38,7 +38,10 @@ internal sealed class AppSettingsStore
             Protect(settings.Proxy.Password), settings.TargetLanguage,
             first.Kind, settings.Translation.EnableFallback, profiles.Select(profile => profile.Kind).ToArray(),
             first.Endpoint, Protect(first.ApiKey), first.Region, first.ApiKeyHeader, first.RequestTemplate, first.ResponsePath,
-            storedProfiles);
+            storedProfiles,
+            settings.Hotkeys.CaptureModifiers, settings.Hotkeys.CaptureVirtualKey,
+            settings.Hotkeys.TranslateModifiers, settings.Hotkeys.TranslateVirtualKey,
+            settings.Ocr.Language, settings.Ocr.EnableAngleDetection);
 
         var json = JsonSerializer.Serialize(stored, new JsonSerializerOptions { WriteIndented = true });
         var temporaryPath = _path + ".tmp";
@@ -61,7 +64,15 @@ internal sealed class AppSettingsStore
                 new ProxySettings(stored.ProxyMode, stored.ProxyScheme, stored.ProxyHost, stored.ProxyPort,
                     stored.ProxyUsername, Unprotect(stored.ProtectedProxyPassword)),
                 stored.TargetLanguage,
-                new TranslationSettings(stored.EnableTranslationFallback, LoadProfiles(stored)));
+                new TranslationSettings(stored.EnableTranslationFallback, LoadProfiles(stored)),
+                new HotkeySettings(
+                    stored.CaptureHotkeyModifiers,
+                    stored.CaptureHotkeyVirtualKey == 0 ? AppSettings.Default.Hotkeys.CaptureVirtualKey : stored.CaptureHotkeyVirtualKey,
+                    stored.TranslateHotkeyModifiers,
+                    stored.TranslateHotkeyVirtualKey == 0 ? AppSettings.Default.Hotkeys.TranslateVirtualKey : stored.TranslateHotkeyVirtualKey),
+                new OcrSettings(
+                    string.IsNullOrWhiteSpace(stored.OcrLanguage) ? "auto" : stored.OcrLanguage,
+                    stored.EnableOcrAngleDetection));
         }
         catch (Exception) when (File.Exists(_path))
         {
@@ -137,7 +148,13 @@ internal sealed class AppSettingsStore
         string? TranslationApiKeyHeader = null,
         string? TranslationRequestTemplate = null,
         string? TranslationResponsePath = null,
-        StoredTranslationProvider[]? TranslationProviders = null);
+        StoredTranslationProvider[]? TranslationProviders = null,
+        uint CaptureHotkeyModifiers = 0,
+        uint CaptureHotkeyVirtualKey = 0x70,
+        uint TranslateHotkeyModifiers = 0x0002,
+        uint TranslateHotkeyVirtualKey = 0x70,
+        string OcrLanguage = "auto",
+        bool EnableOcrAngleDetection = true);
 
     private sealed record StoredTranslationProvider(
         string Id,

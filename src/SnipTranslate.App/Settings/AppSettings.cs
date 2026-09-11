@@ -40,10 +40,22 @@ internal sealed record TranslationSettings(
     bool EnableFallback,
     IReadOnlyList<TranslationProviderSettings> Providers);
 
+internal sealed record HotkeySettings(
+    uint CaptureModifiers,
+    uint CaptureVirtualKey,
+    uint TranslateModifiers,
+    uint TranslateVirtualKey);
+
+internal sealed record OcrSettings(
+    string Language,
+    bool EnableAngleDetection);
+
 internal sealed record AppSettings(
     ProxySettings Proxy,
     string TargetLanguage,
-    TranslationSettings Translation)
+    TranslationSettings Translation,
+    HotkeySettings Hotkeys,
+    OcrSettings Ocr)
 {
     internal static AppSettings Default { get; } = new(
         new ProxySettings(ProxyMode.System, "http", string.Empty, 7890, string.Empty, string.Empty),
@@ -54,7 +66,9 @@ internal sealed record AppSettings(
             {
                 CreateDefaultProvider(TranslationProviderKind.GoogleWeb),
                 CreateDefaultProvider(TranslationProviderKind.MyMemory)
-            }));
+            }),
+        new HotkeySettings(0, 0x70, 0x0002, 0x70),
+        new OcrSettings("auto", true));
 
     internal static TranslationProviderSettings CreateDefaultProvider(TranslationProviderKind kind) => new(
         Guid.NewGuid().ToString("N"),

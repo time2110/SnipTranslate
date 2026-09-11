@@ -9,7 +9,10 @@ using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using SnipTranslate.Native;
 using SnipTranslate.Ocr;
+using SnipTranslate.Services;
+using SnipTranslate.Settings;
 using SnipTranslate.Translation;
+using DrawingRectangle = System.Drawing.Rectangle;
 
 namespace SnipTranslate.Capture;
 
@@ -23,6 +26,7 @@ public partial class CaptureWindow : Window
     private readonly OcrClient _ocr;
     private readonly ITranslationProvider _translator;
     private readonly Action _closeAll;
+    private readonly AppSettingsStore _settings;
     private readonly CaptureSurface _surface;
     private readonly CancellationTokenSource _operationCancellation = new();
     private CancellationTokenSource? _requestCancellation;
@@ -35,12 +39,15 @@ public partial class CaptureWindow : Window
     private double _annotationThickness = 3;
     private TextBox? _textEditor;
     private CapturePointerAdorner? _pointerAdorner;
+    private string _lastOcrLanguage = string.Empty;
 
     internal CaptureWindow(
         CaptureFrame frame,
         CaptureMode mode,
         OcrClient ocr,
         ITranslationProvider translator,
+        AppSettingsStore settings,
+        IReadOnlyList<DrawingRectangle> windowTargets,
         Action closeAll)
     {
         InitializeComponent();
@@ -48,9 +55,13 @@ public partial class CaptureWindow : Window
         _mode = mode;
         _ocr = ocr;
         _translator = translator;
+        _settings = settings;
         _closeAll = closeAll;
-        _surface = new CaptureSurface(frame.Bitmap);
+        _surface = new CaptureSurface(frame.Bitmap, frame.Bounds, windowTargets);
         SurfaceHost.Children.Add(_surface);
+
+        var configuredLanguage = settings.Current.Ocr.Language;
+        SelectLanguage(SourceLanguageBox, configuredLanguage == "zh" ? "zh-CN" : configuredLanguage);
 
         ModeText.Text = mode == CaptureMode.Translate
             ? "翻译截图 · 框选后将自动识别"
@@ -472,7 +483,7 @@ public partial class CaptureWindow : Window
             return;
         }
 
-        Clipboard.SetImage(image);
+        ClipboardService.SetImage(image);
         _closeAll();
     }
 
@@ -557,7 +568,13 @@ public partial class CaptureWindow : Window
 
         try
         {
-            var ocrResult = await _ocr.RecognizeAsync(image, cancellationToken);
+            var ocrLanguage = ResolveOcrLanguage();
+            _lastOcrLanguage = ocrLanguage;
+            var ocrResult = await _ocr.RecognizeAsync(
+                image,
+                ocrLanguage,
+                _settings.Current.Ocr.EnableAngleDetection,
+                cancellationToken);
             _lastOcrText = ocrResult.Text;
             SourceText.Text = ocrResult.Text;
             TimingText.Text = $"{ocrResult.ElapsedMilliseconds} ms";
@@ -565,7 +582,7 @@ public partial class CaptureWindow : Window
             RetranslateButton.IsEnabled = !string.IsNullOrWhiteSpace(ocrResult.Text);
             if (translate)
             {
-                ModeText.Text = "正在通过 Google 翻译…";
+                ModeText.Text = "正在翻译…";
                 await TranslateCurrentTextAsync(cancellationToken);
             }
 
@@ -639,14 +656,17 @@ public partial class CaptureWindow : Window
             : requestedTarget;
 
         TranslatedText.Text = "正在翻译…";
+        TranslationHeading.Text = "译文";
         ResultStatusText.Text = $"翻译中 · {LanguageLabel(source == "auto" ? detected : source)} → {LanguageLabel(target)}";
         var effectiveSource = source == "auto" ? detected : source;
-        var translated = await _translator.TranslateAsync(text, effectiveSource, target, cancellationToken);
-        TranslatedText.Text = translated;
-        var service = _translator as TranslationService;
-        var fallback = service?.LastFallbackOccurred == true ? "（自动切换）" : string.Empty;
-        var provider = service?.LastProviderName ?? "翻译完成";
-        ResultStatusText.Text = $"{provider}{fallback} · {LanguageLabel(source == "auto" ? detected : source)} → {LanguageLabel(target)}";
+        var result = _translator is TranslationService service
+            ? await service.TranslateDetailedAsync(text, effectiveSource, target, cancellationToken)
+            : new TranslationResult(await _translator.TranslateAsync(text, effectiveSource, target, cancellationToken), "翻译服务", false, 0, false);
+        TranslatedText.Text = result.Text;
+        TranslationHeading.Text = $"{result.ProviderName} 译文";
+        var fallback = result.WasFallback ? "（自动切换）" : string.Empty;
+        var cached = result.FromCache ? " · 缓存" : string.Empty;
+        ResultStatusText.Text = $"{result.ProviderName}{fallback}{cached} · {LanguageLabel(source == "auto" ? detected : source)} → {LanguageLabel(target)}";
     }
 
     private async void OnLanguageChanged(object sender, SelectionChangedEventArgs e)
@@ -657,7 +677,14 @@ public partial class CaptureWindow : Window
             return;
         }
 
-        await RetranslateAsync();
+        if (ReferenceEquals(sender, SourceLanguageBox) && ResolveOcrLanguage() != _lastOcrLanguage)
+        {
+            await RunOcrAsync(translate: _showTranslation);
+        }
+        else
+        {
+            await RetranslateAsync();
+        }
     }
 
     private void OnSwapLanguageClick(object sender, RoutedEventArgs e)
@@ -700,10 +727,25 @@ public partial class CaptureWindow : Window
             .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), language, StringComparison.OrdinalIgnoreCase));
     }
 
+    private string ResolveOcrLanguage()
+    {
+        var selected = SelectedLanguage(SourceLanguageBox, "auto");
+        return selected switch
+        {
+            "en" => "en",
+            "ko" => "ko",
+            _ => "auto"
+        };
+    }
+
     private static string DetectPrimaryLanguage(string text)
     {
+        var korean = text.Count(character => character is >= '\uAC00' and <= '\uD7AF' or >= '\u1100' and <= '\u11FF');
+        var japanese = text.Count(character => character is >= '\u3040' and <= '\u30FF');
         var chinese = text.Count(character => character is >= '\u3400' and <= '\u9FFF');
         var latin = text.Count(character => character is >= 'A' and <= 'Z' or >= 'a' and <= 'z');
+        if (korean > 0 && korean >= japanese) return "ko";
+        if (japanese > 0) return "ja";
         return chinese >= latin ? "zh-CN" : "en";
     }
 
@@ -720,7 +762,7 @@ public partial class CaptureWindow : Window
     {
         if (!string.IsNullOrWhiteSpace(text))
         {
-            Clipboard.SetText(text);
+            ClipboardService.SetText(text);
         }
     }
 }

@@ -6,7 +6,7 @@ namespace SnipTranslate.OcrWorker;
 internal sealed class OcrEngine : IAsyncDisposable
 {
     private readonly string _modelDirectory = Path.Combine(AppContext.BaseDirectory, "models");
-    private OcrLite? _engine;
+    private readonly Dictionary<string, OcrLite> _engines = new(StringComparer.OrdinalIgnoreCase);
 
     internal static bool ModelsPresent()
     {
@@ -21,37 +21,31 @@ internal sealed class OcrEngine : IAsyncDisposable
             throw new FileNotFoundException("RapidOCR 模型不完整，请安装默认中英模型包。");
         }
 
-        _engine = new OcrLite
-        {
-            DetPath = Path.Combine(_modelDirectory, RequiredModelNames[0]),
-            ClsPath = Path.Combine(_modelDirectory, RequiredModelNames[1]),
-            RecPath = Path.Combine(_modelDirectory, RequiredModelNames[2]),
-            KeyDicPath = Path.Combine(_modelDirectory, RequiredModelNames[3])
-        };
-        await _engine.InitModels();
+        await GetEngineAsync("auto");
     }
 
     internal Task<OcrResponse> RecognizeAsync(OcrRequest request, CancellationToken cancellationToken)
     {
-        if (_engine is null)
-        {
-            throw new InvalidOperationException("OCR 引擎尚未初始化。");
-        }
+        return RecognizeCoreAsync(request, cancellationToken);
+    }
 
-        return Task.Run(() =>
+    private async Task<OcrResponse> RecognizeCoreAsync(OcrRequest request, CancellationToken cancellationToken)
+    {
+        var engine = await GetEngineAsync(request.Language);
+        return await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var stopwatch = Stopwatch.StartNew();
             var imageBytes = File.ReadAllBytes(request.ImagePath);
-            var result = _engine.Detect(
+            var result = engine.Detect(
                 imageBytes,
                 padding: 12,
                 maxSideLen: 1600,
                 boxScoreThresh: 0.5f,
                 boxThresh: 0.3f,
                 unClipRatio: 1.6f,
-                doAngle: false,
-                mostAngle: false);
+                doAngle: request.EnableAngleDetection,
+                mostAngle: request.EnableAngleDetection);
             stopwatch.Stop();
 
             return new OcrResponse(
@@ -65,14 +59,57 @@ internal sealed class OcrEngine : IAsyncDisposable
         }, cancellationToken);
     }
 
+    private async Task<OcrLite> GetEngineAsync(string? language)
+    {
+        var profile = NormalizeProfile(language);
+        if (_engines.TryGetValue(profile, out var existing)) return existing;
+
+        var (recognitionModel, dictionary) = profile switch
+        {
+            "ko" => ("korean_PP-OCRv5_rec_mobile.onnx", "ppocrv5_korean_dict.txt"),
+            "en" when File.Exists(Path.Combine(_modelDirectory, "en_PP-OCRv5_rec_mobile.onnx")) =>
+                ("en_PP-OCRv5_rec_mobile.onnx", "ppocrv5_en_dict.txt"),
+            _ => (RequiredModelNames[2], RequiredModelNames[3])
+        };
+        if (!File.Exists(Path.Combine(_modelDirectory, recognitionModel)) ||
+            !File.Exists(Path.Combine(_modelDirectory, dictionary)))
+        {
+            throw new FileNotFoundException($"缺少 {LanguageLabel(profile)} OCR 模型，请运行 scripts/Get-RapidOcrModels.ps1。");
+        }
+
+        var engine = new OcrLite
+        {
+            DetPath = Path.Combine(_modelDirectory, RequiredModelNames[0]),
+            ClsPath = Path.Combine(_modelDirectory, RequiredModelNames[1]),
+            RecPath = Path.Combine(_modelDirectory, recognitionModel),
+            KeyDicPath = Path.Combine(_modelDirectory, dictionary)
+        };
+        await engine.InitModels();
+        _engines[profile] = engine;
+        return engine;
+    }
+
+    private static string NormalizeProfile(string? language) => language?.ToLowerInvariant() switch
+    {
+        "ko" => "ko",
+        "en" => "en",
+        _ => "auto"
+    };
+
+    private static string LanguageLabel(string profile) => profile switch
+    {
+        "ko" => "韩文",
+        "en" => "英文",
+        _ => "中英日"
+    };
+
     public ValueTask DisposeAsync()
     {
-        if (_engine is IDisposable disposable)
+        foreach (var disposable in _engines.Values.OfType<IDisposable>())
         {
             disposable.Dispose();
         }
-
-        _engine = null;
+        _engines.Clear();
         return ValueTask.CompletedTask;
     }
 

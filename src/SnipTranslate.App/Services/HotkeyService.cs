@@ -1,6 +1,7 @@
 using System.Windows.Interop;
 using SnipTranslate.Capture;
 using SnipTranslate.Native;
+using SnipTranslate.Settings;
 
 namespace SnipTranslate.Services;
 
@@ -26,21 +27,29 @@ internal sealed class HotkeyService : IDisposable
         _source.AddHook(WindowProcedure);
     }
 
-    internal bool RegisterDefaults()
+    internal HotkeyRegistrationResult Register(HotkeySettings settings)
     {
+        UnregisterCurrent();
         _captureRegistered = NativeMethods.RegisterHotKey(
             _source.Handle,
             CaptureHotkeyId,
-            0,
-            NativeMethods.VkF1);
+            settings.CaptureModifiers | NativeMethods.ModNoRepeat,
+            settings.CaptureVirtualKey);
 
         _translateRegistered = NativeMethods.RegisterHotKey(
             _source.Handle,
             TranslateHotkeyId,
-            NativeMethods.ModControl,
-            NativeMethods.VkF1);
+            settings.TranslateModifiers | NativeMethods.ModNoRepeat,
+            settings.TranslateVirtualKey);
 
-        return _captureRegistered && _translateRegistered;
+        return new HotkeyRegistrationResult(_captureRegistered, _translateRegistered);
+    }
+
+    private void UnregisterCurrent()
+    {
+        if (_captureRegistered) NativeMethods.UnregisterHotKey(_source.Handle, CaptureHotkeyId);
+        if (_translateRegistered) NativeMethods.UnregisterHotKey(_source.Handle, TranslateHotkeyId);
+        _captureRegistered = _translateRegistered = false;
     }
 
     private nint WindowProcedure(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
@@ -67,18 +76,14 @@ internal sealed class HotkeyService : IDisposable
 
     public void Dispose()
     {
-        if (_captureRegistered)
-        {
-            NativeMethods.UnregisterHotKey(_source.Handle, CaptureHotkeyId);
-        }
-
-        if (_translateRegistered)
-        {
-            NativeMethods.UnregisterHotKey(_source.Handle, TranslateHotkeyId);
-        }
+        UnregisterCurrent();
 
         _source.RemoveHook(WindowProcedure);
         _source.Dispose();
     }
 }
 
+internal sealed record HotkeyRegistrationResult(bool CaptureRegistered, bool TranslateRegistered)
+{
+    internal bool Success => CaptureRegistered && TranslateRegistered;
+}

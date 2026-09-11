@@ -32,7 +32,7 @@ public partial class App : System.Windows.Application
         _ocr = new OcrClient();
         _settings = new AppSettingsStore();
         _translator = new TranslationService(_settings);
-        _capture = new CaptureCoordinator(_ocr, _translator);
+        _capture = new CaptureCoordinator(_ocr, _translator, _settings);
         _hotkeys = new HotkeyService();
         _hotkeys.CaptureRequested += (_, mode) => Dispatcher.Invoke(() => _capture.Begin(mode));
 
@@ -42,10 +42,7 @@ public partial class App : System.Windows.Application
             settings: ShowSettings,
             exit: Shutdown);
 
-        if (!_hotkeys.RegisterDefaults())
-        {
-            _tray.ShowMessage("快捷键冲突", "F1 或 Ctrl+F1 已被其他程序占用，可从托盘菜单启动截图。");
-        }
+        RegisterHotkeys(showSuccess: false);
 
         if (e.Args.Contains("--capture", StringComparer.OrdinalIgnoreCase))
         {
@@ -63,8 +60,26 @@ public partial class App : System.Windows.Application
         }
 
         var window = new SettingsWindow(_settings!);
+        window.Closed += (_, _) => RegisterHotkeys(showSuccess: false);
         window.Show();
         window.Activate();
+    }
+
+    private void RegisterHotkeys(bool showSuccess)
+    {
+        if (_hotkeys is null || _settings is null || _tray is null) return;
+        var result = _hotkeys.Register(_settings.Current.Hotkeys);
+        if (!result.Success)
+        {
+            var conflicts = new List<string>();
+            if (!result.CaptureRegistered) conflicts.Add("截图");
+            if (!result.TranslateRegistered) conflicts.Add("截图翻译");
+            _tray.ShowMessage("快捷键冲突", $"{string.Join("、", conflicts)}快捷键已被占用，请在设置中修改。");
+        }
+        else if (showSuccess)
+        {
+            _tray.ShowMessage("快捷键已更新", "新的全局快捷键已经生效。");
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

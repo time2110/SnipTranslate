@@ -20,6 +20,26 @@ $models = @(
     @{
         Name = 'ppocrv5_dict.txt'
         Sha256 = 'D1979E9F794C464C0D2E0B70A7FE14DD978E9DC644C0E71F14158CDF8342AF1B'
+    },
+    @{
+        Name = 'en_PP-OCRv5_rec_mobile.onnx'
+        Url = 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/rec/en_PP-OCRv5_rec_mobile.onnx'
+        Sha256 = 'C3461ADD59BB4323ECBA96A492AB75E06DDA42467C9E3D0C18DB5D1D21924BE8'
+    },
+    @{
+        Name = 'ppocrv5_en_dict.txt'
+        Url = 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv5/rec/en_PP-OCRv5_rec_mobile/ppocrv5_en_dict.txt'
+        Sha256 = 'E025A66D31F327BA0C232E03F407AE8D105E1E709E7CCB3F408AA778C24E70D6'
+    },
+    @{
+        Name = 'korean_PP-OCRv5_rec_mobile.onnx'
+        Url = 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile.onnx'
+        Sha256 = 'CD6E2EA50F6943CA7271EB8C56A877A5A90720B7047FE9C41A2E541A25773C9B'
+    },
+    @{
+        Name = 'ppocrv5_korean_dict.txt'
+        Url = 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile/ppocrv5_korean_dict.txt'
+        Sha256 = 'A88071C68C01707489BAA79EBE0405B7BEB5CCA229F4FC94CC3EF992328802D7'
     }
 )
 
@@ -30,20 +50,19 @@ foreach ($model in $models) {
     if (Test-Path -LiteralPath $target) {
         $existingHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
         if ($existingHash -eq $model.Sha256) {
-            Write-Host "已存在并通过校验: $($model.Name)"
+            Write-Host "Already present and verified: $($model.Name)"
             continue
         }
     }
 
-    $url = "https://raw.githubusercontent.com/RapidAI/RapidOCRCSharp/main/RapidOCRConsole/models/$($model.Name)"
-    Write-Host "正在下载: $($model.Name)"
+    $url = if ($model.Url) { $model.Url } else { "https://raw.githubusercontent.com/RapidAI/RapidOCRCSharp/main/RapidOCRConsole/models/$($model.Name)" }
+    Write-Host "Downloading: $($model.Name)"
     Invoke-WebRequest -Uri $url -OutFile $target
 
     $downloadedHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
     if ($downloadedHash -ne $model.Sha256) {
-        throw "模型校验失败: $($model.Name)"
+        throw "Model checksum verification failed: $($model.Name)"
     }
 }
 
-Write-Host 'RapidOCR 模型准备完成。'
-
+Write-Host 'RapidOCR models are ready.'

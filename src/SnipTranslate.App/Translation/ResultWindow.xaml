@@ -33,7 +33,7 @@
     <TextBlock x:Name="TranslationHeading"
                Grid.Row="2"
                Margin="0,14,0,7"
-               Text="Google 译文"
+               Text="译文"
                FontSize="14"
                FontWeight="SemiBold"
                Foreground="#172033" />
@@ -51,4 +51,3 @@
     </StackPanel>
   </Grid>
 </Window>
-

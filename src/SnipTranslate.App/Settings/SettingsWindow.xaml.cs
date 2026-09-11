@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -14,6 +13,7 @@ public partial class SettingsWindow : Window
     private ListBoxItem? _editingProviderItem;
     private Point _providerDragStart;
     private ListBoxItem? _draggedProviderItem;
+    private HotkeySettings _hotkeys = AppSettings.Default.Hotkeys;
 
     internal SettingsWindow(AppSettingsStore store)
     {
@@ -26,6 +26,13 @@ public partial class SettingsWindow : Window
     {
         _loading = true;
         StartupBox.IsChecked = StartupManager.IsEnabled();
+        _hotkeys = settings.Hotkeys;
+        CaptureHotkeyBox.Text = FormatHotkey(_hotkeys.CaptureModifiers, _hotkeys.CaptureVirtualKey);
+        TranslateHotkeyBox.Text = FormatHotkey(_hotkeys.TranslateModifiers, _hotkeys.TranslateVirtualKey);
+        OcrLanguageBox.SelectedItem = OcrLanguageBox.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item => Equals(item.Tag, settings.Ocr.Language));
+        OcrLanguageBox.SelectedIndex = Math.Max(0, OcrLanguageBox.SelectedIndex);
+        OcrAngleBox.IsChecked = settings.Ocr.EnableAngleDetection;
         FallbackBox.IsChecked = settings.Translation.EnableFallback;
         ProviderOrderBox.Items.Clear();
         foreach (var profile in settings.Translation.Providers) ProviderOrderBox.Items.Add(CreateProviderItem(profile));
@@ -58,10 +65,17 @@ public partial class SettingsWindow : Window
         var providers = ReadProviderProfiles();
         if (providers.Count == 0) throw new InvalidOperationException("至少需要添加一个翻译 API。");
         if (!providers.Any(profile => profile.Enabled)) throw new InvalidOperationException("至少需要启用一个翻译 API。");
+        if (_hotkeys.CaptureModifiers == _hotkeys.TranslateModifiers &&
+            _hotkeys.CaptureVirtualKey == _hotkeys.TranslateVirtualKey)
+            throw new InvalidOperationException("截图和截图翻译不能使用相同的快捷键。");
         var target = ((ComboBoxItem?)TargetLanguageBox.SelectedItem)?.Tag?.ToString() ?? "zh-CN";
         return new AppSettings(
             new ProxySettings(mode, scheme, ProxyHostBox.Text.Trim(), port, ProxyUsernameBox.Text.Trim(), ProxyPasswordBox.Password), target,
-            new TranslationSettings(FallbackBox.IsChecked == true, providers));
+            new TranslationSettings(FallbackBox.IsChecked == true, providers),
+            _hotkeys,
+            new OcrSettings(
+                (OcrLanguageBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "auto",
+                OcrAngleBox.IsChecked == true));
     }
 
     private void OnProviderChanged(object sender, SelectionChangedEventArgs e)
@@ -276,13 +290,13 @@ public partial class SettingsWindow : Window
             _store.Save(settings);
             TestButton.IsEnabled = false;
             StatusText.Text = "正在测试翻译服务…";
-            var timer = Stopwatch.StartNew();
+            if (_editingProviderItem?.Tag is not TranslationProviderSettings selected)
+                throw new InvalidOperationException("请先选择要测试的翻译接口。");
             var targetIsEnglish = settings.TargetLanguage == "en";
             using var service = new TranslationService(_store);
-            var result = await service.TranslateAsync(targetIsEnglish ? "你好" : "hello", targetIsEnglish ? "zh-CN" : "en", settings.TargetLanguage, CancellationToken.None);
-            timer.Stop();
-            var fallback = service.LastFallbackOccurred ? " · 已自动切换" : string.Empty;
-            StatusText.Text = $"连接成功 · {service.LastProviderName}{fallback} · {timer.ElapsedMilliseconds} ms · {result}";
+            var result = await service.TestProviderAsync(selected, targetIsEnglish ? "你好" : "hello",
+                targetIsEnglish ? "zh-CN" : "en", settings.TargetLanguage, CancellationToken.None);
+            StatusText.Text = $"连接成功 · {result.ProviderName} · {result.ElapsedMilliseconds} ms · {result.Text}";
         }
         catch (Exception exception) { StatusText.Text = $"连接失败：{exception.Message}"; }
         finally { TestButton.IsEnabled = true; }
@@ -300,4 +314,61 @@ public partial class SettingsWindow : Window
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
+
+    private void OnCaptureHotkeyKeyDown(object sender, KeyEventArgs e)
+    {
+        if (TryCaptureHotkey(e, out var modifiers, out var virtualKey))
+        {
+            _hotkeys = _hotkeys with { CaptureModifiers = modifiers, CaptureVirtualKey = virtualKey };
+            CaptureHotkeyBox.Text = FormatHotkey(modifiers, virtualKey);
+        }
+    }
+
+    private void OnTranslateHotkeyKeyDown(object sender, KeyEventArgs e)
+    {
+        if (TryCaptureHotkey(e, out var modifiers, out var virtualKey))
+        {
+            _hotkeys = _hotkeys with { TranslateModifiers = modifiers, TranslateVirtualKey = virtualKey };
+            TranslateHotkeyBox.Text = FormatHotkey(modifiers, virtualKey);
+        }
+    }
+
+    private static bool TryCaptureHotkey(KeyEventArgs e, out uint modifiers, out uint virtualKey)
+    {
+        e.Handled = true;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        modifiers = ToNativeModifiers(Keyboard.Modifiers);
+        virtualKey = 0;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or
+            Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return false;
+        if (modifiers == 0 && key is < Key.F1 or > Key.F12)
+        {
+            System.Media.SystemSounds.Beep.Play();
+            return false;
+        }
+        virtualKey = (uint)KeyInterop.VirtualKeyFromKey(key);
+        return virtualKey != 0;
+    }
+
+    private static uint ToNativeModifiers(ModifierKeys modifiers)
+    {
+        uint result = 0;
+        if (modifiers.HasFlag(ModifierKeys.Alt)) result |= 0x0001;
+        if (modifiers.HasFlag(ModifierKeys.Control)) result |= 0x0002;
+        if (modifiers.HasFlag(ModifierKeys.Shift)) result |= 0x0004;
+        if (modifiers.HasFlag(ModifierKeys.Windows)) result |= 0x0008;
+        return result;
+    }
+
+    private static string FormatHotkey(uint modifiers, uint virtualKey)
+    {
+        var parts = new List<string>();
+        if ((modifiers & 0x0002) != 0) parts.Add("Ctrl");
+        if ((modifiers & 0x0001) != 0) parts.Add("Alt");
+        if ((modifiers & 0x0004) != 0) parts.Add("Shift");
+        if ((modifiers & 0x0008) != 0) parts.Add("Win");
+        var key = KeyInterop.KeyFromVirtualKey((int)virtualKey);
+        parts.Add(key.ToString());
+        return string.Join(" + ", parts);
+    }
 }

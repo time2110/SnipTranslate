@@ -10,6 +10,28 @@
         <TextBlock Text="常规" FontSize="22" FontWeight="SemiBold" Foreground="#172033" Margin="0,0,0,14" />
         <CheckBox x:Name="StartupBox" Content="开机自动启动 SnipTranslate" />
         <TextBlock Margin="22,6,0,0" Foreground="#64748B" Text="登录当前 Windows 用户后在后台运行，无需管理员权限。" />
+        <Grid Margin="0,16,0,0">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="125" /><ColumnDefinition Width="200" /><ColumnDefinition Width="110" /><ColumnDefinition Width="200" /></Grid.ColumnDefinitions>
+          <TextBlock VerticalAlignment="Center" Text="全局快捷键" />
+          <TextBox x:Name="CaptureHotkeyBox" Grid.Column="1" Height="30" Padding="7,4" IsReadOnly="True"
+                   ToolTip="点击后直接按下新的组合键" PreviewKeyDown="OnCaptureHotkeyKeyDown" />
+          <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="18,0,0,0" Text="截图翻译" />
+          <TextBox x:Name="TranslateHotkeyBox" Grid.Column="3" Height="30" Padding="7,4" IsReadOnly="True"
+                   ToolTip="点击后直接按下新的组合键" PreviewKeyDown="OnTranslateHotkeyKeyDown" />
+        </Grid>
+        <TextBlock Margin="125,6,0,0" Foreground="#64748B" Text="点击输入框并按下组合键；F1–F12 可以不加修饰键。" />
+        <Grid Margin="0,14,0,0">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="125" /><ColumnDefinition Width="200" /><ColumnDefinition Width="110" /><ColumnDefinition Width="200" /></Grid.ColumnDefinitions>
+          <TextBlock VerticalAlignment="Center" Text="默认 OCR 语言" />
+          <ComboBox x:Name="OcrLanguageBox" Grid.Column="1" Height="30">
+            <ComboBoxItem Content="自动/中英日" Tag="auto" />
+            <ComboBoxItem Content="中文/English/日本語" Tag="zh" />
+            <ComboBoxItem Content="English 优先" Tag="en" />
+            <ComboBoxItem Content="한국어 韩语" Tag="ko" />
+          </ComboBox>
+          <CheckBox x:Name="OcrAngleBox" Grid.Column="2" Grid.ColumnSpan="2" Margin="18,0,0,0"
+                    VerticalAlignment="Center" Content="识别旋转文字" />
+        </Grid>
         <Separator Margin="0,20,0,17" />
         <TextBlock Text="翻译服务" FontSize="22" FontWeight="SemiBold" Foreground="#172033" Margin="0,0,0,18" />
         <Grid Margin="0,0,0,12">

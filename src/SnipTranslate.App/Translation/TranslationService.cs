@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http;
+using System.Diagnostics;
 using SnipTranslate.Settings;
 
 namespace SnipTranslate.Translation;
@@ -10,6 +12,7 @@ internal sealed class TranslationService : ITranslationProvider, IDisposable
     private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
     private readonly Queue<string> _cacheOrder = new();
     private readonly Dictionary<string, ITranslationProvider> _providers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ProviderHealth> _health = new(StringComparer.Ordinal);
     private AppSettings? _activeSettings;
 
     internal TranslationService(AppSettingsStore settingsStore) => _settingsStore = settingsStore;
@@ -18,6 +21,13 @@ internal sealed class TranslationService : ITranslationProvider, IDisposable
     internal bool LastFallbackOccurred { get; private set; }
 
     public async Task<string> TranslateAsync(string text, string sourceLanguage, string targetLanguage, CancellationToken cancellationToken)
+        => (await TranslateDetailedAsync(text, sourceLanguage, targetLanguage, cancellationToken)).Text;
+
+    internal async Task<TranslationResult> TranslateDetailedAsync(
+        string text,
+        string sourceLanguage,
+        string targetLanguage,
+        CancellationToken cancellationToken)
     {
         var settings = _settingsStore.Current;
         var profileSignature = string.Join(',', settings.Translation.Providers.Select(profile => profile.GetHashCode()));
@@ -28,7 +38,7 @@ internal sealed class TranslationService : ITranslationProvider, IDisposable
             {
                 LastProviderName = cached.ProviderName;
                 LastFallbackOccurred = cached.WasFallback;
-                return cached.Text;
+                return new TranslationResult(cached.Text, cached.ProviderName, cached.WasFallback, 0, true);
             }
         }
 
@@ -38,12 +48,20 @@ internal sealed class TranslationService : ITranslationProvider, IDisposable
         {
             var profile = order[index];
             cancellationToken.ThrowIfCancellationRequested();
+            if (TryGetCooldown(profile.Id, out var cooldown))
+            {
+                failures.Add($"{profile.Name}：暂时停用至 {cooldown:HH:mm:ss}");
+                continue;
+            }
             try
             {
+                var stopwatch = Stopwatch.StartNew();
                 var translated = await GetProvider(profile).TranslateAsync(text, sourceLanguage, targetLanguage, cancellationToken);
+                stopwatch.Stop();
                 var entry = new CacheEntry(translated, profile.Name, index > 0);
                 lock (_sync)
                 {
+                    _health.Remove(profile.Id);
                     LastProviderName = entry.ProviderName;
                     LastFallbackOccurred = entry.WasFallback;
                     if (!_cache.ContainsKey(cacheKey))
@@ -53,7 +71,7 @@ internal sealed class TranslationService : ITranslationProvider, IDisposable
                         while (_cacheOrder.Count > 128) _cache.Remove(_cacheOrder.Dequeue());
                     }
                 }
-                return translated;
+                return new TranslationResult(translated, profile.Name, index > 0, stopwatch.ElapsedMilliseconds, false);
             }
             catch (OperationCanceledException)
             {
@@ -61,11 +79,56 @@ internal sealed class TranslationService : ITranslationProvider, IDisposable
             }
             catch (Exception exception)
             {
+                RecordFailure(profile.Id, exception);
                 failures.Add($"{profile.Name}：{ShortMessage(exception.Message)}");
             }
         }
 
         throw new InvalidOperationException("所有翻译接口均失败：" + string.Join("；", failures));
+    }
+
+    internal async Task<TranslationResult> TestProviderAsync(
+        TranslationProviderSettings profile,
+        string text,
+        string sourceLanguage,
+        string targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var translated = await GetProvider(profile).TranslateAsync(text, sourceLanguage, targetLanguage, cancellationToken);
+        stopwatch.Stop();
+        return new TranslationResult(translated, profile.Name, false, stopwatch.ElapsedMilliseconds, false);
+    }
+
+    private bool TryGetCooldown(string providerId, out DateTimeOffset until)
+    {
+        lock (_sync)
+        {
+            if (_health.TryGetValue(providerId, out var health) && health.UnavailableUntil > DateTimeOffset.Now)
+            {
+                until = health.UnavailableUntil;
+                return true;
+            }
+            until = default;
+            return false;
+        }
+    }
+
+    private void RecordFailure(string providerId, Exception exception)
+    {
+        lock (_sync)
+        {
+            _health.TryGetValue(providerId, out var previous);
+            var count = previous?.ConsecutiveFailures + 1 ?? 1;
+            var cooldown = exception switch
+            {
+                HttpRequestException { StatusCode: HttpStatusCode.TooManyRequests } => TimeSpan.FromMinutes(1),
+                HttpRequestException { StatusCode: HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden } => TimeSpan.FromMinutes(5),
+                _ when count >= 2 => TimeSpan.FromSeconds(30),
+                _ => TimeSpan.Zero
+            };
+            _health[providerId] = new ProviderHealth(count, DateTimeOffset.Now + cooldown);
+        }
     }
 
     private static IReadOnlyList<TranslationProviderSettings> BuildProviderOrder(TranslationSettings settings)
@@ -139,4 +202,12 @@ internal sealed class TranslationService : ITranslationProvider, IDisposable
     }
 
     private sealed record CacheEntry(string Text, string ProviderName, bool WasFallback);
+    private sealed record ProviderHealth(int ConsecutiveFailures, DateTimeOffset UnavailableUntil);
 }
+
+internal sealed record TranslationResult(
+    string Text,
+    string ProviderName,
+    bool WasFallback,
+    long ElapsedMilliseconds,
+    bool FromCache);

@@ -223,7 +223,7 @@
           <TextBlock x:Name="TranslationHeading"
                      Grid.Row="3"
                      Margin="0,11,0,6"
-                     Text="Google 译文"
+                     Text="译文"
                      FontWeight="SemiBold"
                      Foreground="#334155" />
           <TextBox x:Name="TranslatedText"

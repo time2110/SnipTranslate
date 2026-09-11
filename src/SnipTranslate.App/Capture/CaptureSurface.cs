@@ -4,6 +4,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using SnipTranslate.Services;
+using DrawingRectangle = System.Drawing.Rectangle;
 
 namespace SnipTranslate.Capture;
 
@@ -11,6 +13,8 @@ internal sealed class CaptureSurface : FrameworkElement
 {
     private const double HandleSize = 7;
     private readonly BitmapSource _bitmap;
+    private readonly DrawingRectangle _displayBounds;
+    private readonly IReadOnlyList<DrawingRectangle> _windowTargets;
     private Point _anchor;
     private Point _pointer;
     private Rect _startSelection;
@@ -25,10 +29,14 @@ internal sealed class CaptureSurface : FrameworkElement
     private bool _showRgbColor;
     private TextAnnotation? _textDraft;
     private bool _pointerOverlayVisible = true;
+    private Rect? _hoverTarget;
+    private Rect? _pressedTarget;
 
-    internal CaptureSurface(BitmapSource bitmap)
+    internal CaptureSurface(BitmapSource bitmap, DrawingRectangle displayBounds, IReadOnlyList<DrawingRectangle> windowTargets)
     {
         _bitmap = bitmap;
+        _displayBounds = displayBounds;
+        _windowTargets = windowTargets;
         Focusable = true;
         Cursor = Cursors.Cross;
         SnapsToDevicePixels = true;
@@ -78,6 +86,7 @@ internal sealed class CaptureSurface : FrameworkElement
 
         if (_dragOperation == DragOperation.None)
         {
+            _pressedTarget = FindWindowTarget(_pointer);
             _dragOperation = DragOperation.New;
             _annotations.Clear();
             Selection = new Rect(_anchor, _anchor);
@@ -111,6 +120,7 @@ internal sealed class CaptureSurface : FrameworkElement
             if (_activeTool == AnnotationTool.Select)
             {
                 Cursor = CursorFor(HitTestOperation(_pointer));
+                if (Selection is null) _hoverTarget = FindWindowTarget(_pointer);
             }
         }
 
@@ -144,14 +154,31 @@ internal sealed class CaptureSurface : FrameworkElement
 
         if (Selection is { Width: < 2 } or { Height: < 2 })
         {
-            Selection = null;
+            Selection = _pressedTarget;
+            _pressedTarget = null;
+            if (Selection is not null)
+            {
+                RaiseSelectionChanged();
+                SelectionCompleted?.Invoke(this, EventArgs.Empty);
+            }
         }
         else
         {
             SelectionCompleted?.Invoke(this, EventArgs.Empty);
         }
 
+        _pressedTarget = null;
         InvalidateVisual();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (Selection is null)
+        {
+            _hoverTarget = null;
+            InvalidateVisual();
+        }
     }
 
     internal void MoveSelection(double deltaX, double deltaY)
@@ -248,7 +275,7 @@ internal sealed class CaptureSurface : FrameworkElement
         var value = _showRgbColor
             ? $"{color.R}, {color.G}, {color.B}"
             : $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-        Clipboard.SetText(value);
+        ClipboardService.SetText(value);
         _copiedColorMessage = $"已复制 {value}";
         InvalidateVisual();
         PointerOverlayChanged?.Invoke(this, EventArgs.Empty);
@@ -333,11 +360,13 @@ internal sealed class CaptureSurface : FrameworkElement
         var bounds = new Rect(0, 0, ActualWidth, ActualHeight);
         drawingContext.DrawImage(_bitmap, bounds);
 
-        if (Selection is not { } selection)
+        var visibleSelection = Selection ?? _hoverTarget;
+        if (visibleSelection is null)
         {
             drawingContext.DrawRectangle(new SolidColorBrush(Color.FromArgb(105, 0, 0, 0)), null, bounds);
             return;
         }
+        var selection = visibleSelection.Value;
 
         var shade = new SolidColorBrush(Color.FromArgb(115, 0, 0, 0));
         drawingContext.DrawRectangle(shade, null, new Rect(0, 0, ActualWidth, selection.Top));
@@ -346,7 +375,9 @@ internal sealed class CaptureSurface : FrameworkElement
         drawingContext.DrawRectangle(shade, null, new Rect(selection.Right, selection.Top, Math.Max(0, ActualWidth - selection.Right), selection.Height));
 
         var accent = new SolidColorBrush(Color.FromRgb(56, 189, 248));
-        drawingContext.DrawRectangle(null, new Pen(accent, 1.5), selection);
+        drawingContext.DrawRectangle(null, new Pen(accent, Selection is null ? 1 : 1.5), selection);
+
+        if (Selection is null) return;
 
         drawingContext.PushClip(new RectangleGeometry(selection));
         foreach (var annotation in _annotations)
@@ -367,6 +398,22 @@ internal sealed class CaptureSurface : FrameworkElement
         }
 
         DrawSizeLabel(drawingContext, selection);
+    }
+
+    private Rect? FindWindowTarget(Point point)
+    {
+        if (ActualWidth <= 0 || ActualHeight <= 0) return null;
+        var globalX = _displayBounds.Left + point.X * _bitmap.PixelWidth / ActualWidth;
+        var globalY = _displayBounds.Top + point.Y * _bitmap.PixelHeight / ActualHeight;
+        var target = _windowTargets.FirstOrDefault(rectangle => rectangle.Contains((int)globalX, (int)globalY));
+        if (target.Width <= 0 || target.Height <= 0) return null;
+        var clipped = DrawingRectangle.Intersect(target, _displayBounds);
+        if (clipped.Width <= 0 || clipped.Height <= 0) return null;
+        return new Rect(
+            (clipped.Left - _displayBounds.Left) * ActualWidth / _bitmap.PixelWidth,
+            (clipped.Top - _displayBounds.Top) * ActualHeight / _bitmap.PixelHeight,
+            clipped.Width * ActualWidth / _bitmap.PixelWidth,
+            clipped.Height * ActualHeight / _bitmap.PixelHeight);
     }
 
     internal void RenderPointerOverlay(DrawingContext drawingContext)

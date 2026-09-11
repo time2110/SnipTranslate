@@ -39,7 +39,11 @@ internal sealed class OcrClient : IDisposable
         }
     }
 
-    internal async Task<OcrResult> RecognizeAsync(BitmapSource bitmap, CancellationToken cancellationToken)
+    internal async Task<OcrResult> RecognizeAsync(
+        BitmapSource bitmap,
+        string language,
+        bool enableAngleDetection,
+        CancellationToken cancellationToken)
     {
         Prepare();
         var requestId = Guid.NewGuid().ToString("N");
@@ -67,7 +71,13 @@ internal sealed class OcrClient : IDisposable
                 AutoFlush = true
             };
 
-            var request = JsonSerializer.Serialize(new { RequestId = requestId, ImagePath = imagePath });
+            var request = JsonSerializer.Serialize(new
+            {
+                RequestId = requestId,
+                ImagePath = imagePath,
+                Language = language,
+                EnableAngleDetection = enableAngleDetection
+            });
             await writer.WriteLineAsync(request.AsMemory(), cancellationToken);
             var responseJson = await reader.ReadLineAsync(cancellationToken)
                 ?? throw new EndOfStreamException("OCR Worker 没有返回结果。");
@@ -118,4 +128,3 @@ internal sealed class OcrClient : IDisposable
 }
 
 internal sealed record OcrResult(string Text, long ElapsedMilliseconds);
-

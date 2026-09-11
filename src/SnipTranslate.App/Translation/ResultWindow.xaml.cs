@@ -1,4 +1,5 @@
 using System.Windows;
+using SnipTranslate.Services;
 
 namespace SnipTranslate.Translation;
 
@@ -16,7 +17,7 @@ public partial class ResultWindow : Window
 
     private void OnCopyClick(object sender, RoutedEventArgs e)
     {
-        Clipboard.SetText(string.IsNullOrWhiteSpace(TranslatedText.Text)
+        ClipboardService.SetText(string.IsNullOrWhiteSpace(TranslatedText.Text)
             ? SourceText.Text
             : TranslatedText.Text);
         Close();
@@ -24,4 +25,3 @@ public partial class ResultWindow : Window
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }
-
