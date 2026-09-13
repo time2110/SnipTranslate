@@ -43,10 +43,14 @@ internal static class Program
             var languageOption = Array.FindIndex(args, value =>
                 value.Equals("--language", StringComparison.OrdinalIgnoreCase));
             var language = languageOption >= 0 && languageOption + 1 < args.Length ? args[languageOption + 1] : "auto";
+            var qualityOption = Array.FindIndex(args, value =>
+                value.Equals("--quality", StringComparison.OrdinalIgnoreCase));
+            var quality = qualityOption >= 0 && qualityOption + 1 < args.Length ? args[qualityOption + 1] : "fast";
+            var enhanced = args.Contains("--enhanced", StringComparer.OrdinalIgnoreCase);
             await using var engine = new OcrEngine();
             await engine.InitializeAsync();
             var response = await engine.RecognizeAsync(
-                new OcrRequest(Guid.NewGuid().ToString("N"), args[imageOption + 1], language, true),
+                new OcrRequest(Guid.NewGuid().ToString("N"), args[imageOption + 1], language, true, quality, enhanced),
                 CancellationToken.None);
             Console.WriteLine(JsonSerializer.Serialize(response));
             return response.Success ? 0 : 1;

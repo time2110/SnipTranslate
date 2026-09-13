@@ -32,6 +32,16 @@
           <CheckBox x:Name="OcrAngleBox" Grid.Column="2" Grid.ColumnSpan="2" Margin="18,0,0,0"
                     VerticalAlignment="Center" Content="识别旋转文字" />
         </Grid>
+        <Grid Margin="0,10,0,0">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="125" /><ColumnDefinition Width="200" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+          <TextBlock VerticalAlignment="Center" Text="OCR 精度" />
+          <ComboBox x:Name="OcrQualityBox" Grid.Column="1" Height="30">
+            <ComboBoxItem Content="快速（Mobile）" Tag="fast" />
+            <ComboBoxItem Content="准确（Server）" Tag="accurate" />
+          </ComboBox>
+          <TextBlock Grid.Column="2" Margin="18,0,0,0" VerticalAlignment="Center" Foreground="#64748B"
+                     Text="准确模式占用更多内存，首次加载较慢。" />
+        </Grid>
         <Separator Margin="0,20,0,17" />
         <TextBlock Text="翻译服务" FontSize="22" FontWeight="SemiBold" Foreground="#172033" Margin="0,0,0,18" />
         <Grid Margin="0,0,0,12">

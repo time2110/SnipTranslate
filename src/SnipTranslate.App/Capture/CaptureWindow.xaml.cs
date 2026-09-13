@@ -12,7 +12,6 @@ using SnipTranslate.Ocr;
 using SnipTranslate.Services;
 using SnipTranslate.Settings;
 using SnipTranslate.Translation;
-using DrawingRectangle = System.Drawing.Rectangle;
 
 namespace SnipTranslate.Capture;
 
@@ -47,7 +46,7 @@ public partial class CaptureWindow : Window
         OcrClient ocr,
         ITranslationProvider translator,
         AppSettingsStore settings,
-        IReadOnlyList<DrawingRectangle> windowTargets,
+        WindowTargetService windowTargets,
         Action closeAll)
     {
         InitializeComponent();
@@ -184,6 +183,13 @@ public partial class CaptureWindow : Window
             return;
         }
 
+        if (key is Key.LeftAlt or Key.RightAlt)
+        {
+            _surface.RefreshSnapTarget();
+            e.Handled = true;
+            return;
+        }
+
         if (_textEditor is not null)
         {
             if (key == Key.Enter && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
@@ -200,6 +206,14 @@ public partial class CaptureWindow : Window
         {
             e.Handled = true;
             CopyText(string.IsNullOrWhiteSpace(TranslatedText.Text) ? SourceText.Text : TranslatedText.Text);
+            return;
+        }
+
+        if (key == Key.R && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) &&
+            ResultPanel.Visibility == Visibility.Visible)
+        {
+            e.Handled = true;
+            _ = RunOcrAsync(_showTranslation, forceEnhanced: true);
             return;
         }
 
@@ -308,7 +322,11 @@ public partial class CaptureWindow : Window
 
     private void OnPreviewKeyUp(object sender, KeyEventArgs e)
     {
-        // Color format changes persist after Shift is released.
+        if (EffectiveKey(e) is Key.LeftAlt or Key.RightAlt)
+        {
+            _surface.RefreshSnapTarget();
+            e.Handled = true;
+        }
     }
 
     private static Key EffectiveKey(KeyEventArgs e) => e.Key switch
@@ -339,6 +357,9 @@ public partial class CaptureWindow : Window
     private void OnTextClick(object sender, RoutedEventArgs e) => SetAnnotationTool(AnnotationTool.Text);
     private void OnUndoClick(object sender, RoutedEventArgs e) => _surface.Undo();
     private void OnOcrClick(object sender, RoutedEventArgs e) => _ = RunOcrAsync(translate: false);
+
+    private void OnReRecognizeClick(object sender, RoutedEventArgs e) =>
+        _ = RunOcrAsync(_showTranslation, forceEnhanced: true);
     private void OnCloseClick(object sender, RoutedEventArgs e) => _closeAll();
     private void OnCloseResultClick(object sender, RoutedEventArgs e) => ResultPanel.Visibility = Visibility.Collapsed;
     private void OnCopySourceClick(object sender, RoutedEventArgs e) => CopyText(SourceText.Text);
@@ -542,12 +563,15 @@ public partial class CaptureWindow : Window
         }
     }
 
-    private async Task RunOcrAsync(bool translate)
+    private async Task RunOcrAsync(bool translate, bool forceEnhanced = false)
     {
         if (_surface.ExportSelection() is not { } image || _surface.Selection is not { } selection)
         {
             return;
         }
+
+        var previousSource = _lastOcrText;
+        var previousTranslation = TranslatedText.Text;
 
         _requestCancellation?.Cancel();
         _requestCancellation?.Dispose();
@@ -574,11 +598,17 @@ public partial class CaptureWindow : Window
                 image,
                 ocrLanguage,
                 _settings.Current.Ocr.EnableAngleDetection,
+                _settings.Current.Ocr.Quality,
+                forceEnhanced,
                 cancellationToken);
             _lastOcrText = ocrResult.Text;
             SourceText.Text = ocrResult.Text;
-            TimingText.Text = $"{ocrResult.ElapsedMilliseconds} ms";
-            ResultStatusText.Text = string.IsNullOrWhiteSpace(ocrResult.Text) ? "未识别到文字" : "识别完成";
+            var confidence = ocrResult.Confidence > 0 ? $" · 置信度 {ocrResult.Confidence:P0}" : string.Empty;
+            TimingText.Text = $"{ocrResult.ElapsedMilliseconds} ms{confidence}";
+            var review = ocrResult.WasEnglishReviewed
+                ? ocrResult.UsedEnglishResult ? " · 已采用英文增强结果" : " · 已用英文模型复核"
+                : ocrResult.WasEnhanced ? " · 英文增强" : string.Empty;
+            ResultStatusText.Text = string.IsNullOrWhiteSpace(ocrResult.Text) ? "未识别到文字" : $"识别完成{review}";
             RetranslateButton.IsEnabled = !string.IsNullOrWhiteSpace(ocrResult.Text);
             if (translate)
             {
@@ -596,9 +626,16 @@ public partial class CaptureWindow : Window
         {
             ModeText.Text = $"失败：{exception.Message}";
             ResultStatusText.Text = $"失败：{exception.Message}";
-            if (string.IsNullOrWhiteSpace(_lastOcrText))
+            if (string.IsNullOrWhiteSpace(previousSource))
             {
                 SourceText.Text = exception.Message;
+            }
+            else
+            {
+                _lastOcrText = previousSource;
+                SourceText.Text = previousSource;
+                TranslatedText.Text = previousTranslation;
+                RetranslateButton.IsEnabled = true;
             }
         }
         finally

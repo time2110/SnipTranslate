@@ -33,6 +33,9 @@ public partial class SettingsWindow : Window
             .FirstOrDefault(item => Equals(item.Tag, settings.Ocr.Language));
         OcrLanguageBox.SelectedIndex = Math.Max(0, OcrLanguageBox.SelectedIndex);
         OcrAngleBox.IsChecked = settings.Ocr.EnableAngleDetection;
+        OcrQualityBox.SelectedItem = OcrQualityBox.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item => Equals(item.Tag, settings.Ocr.Quality));
+        OcrQualityBox.SelectedIndex = Math.Max(0, OcrQualityBox.SelectedIndex);
         FallbackBox.IsChecked = settings.Translation.EnableFallback;
         ProviderOrderBox.Items.Clear();
         foreach (var profile in settings.Translation.Providers) ProviderOrderBox.Items.Add(CreateProviderItem(profile));
@@ -75,7 +78,8 @@ public partial class SettingsWindow : Window
             _hotkeys,
             new OcrSettings(
                 (OcrLanguageBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "auto",
-                OcrAngleBox.IsChecked == true));
+                OcrAngleBox.IsChecked == true,
+                (OcrQualityBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "fast"));
     }
 
     private void OnProviderChanged(object sender, SelectionChangedEventArgs e)

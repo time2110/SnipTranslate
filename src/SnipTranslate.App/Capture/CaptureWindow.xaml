@@ -172,6 +172,13 @@
                     Content="×"
                     ToolTip="收起结果"
                     Click="OnCloseResultClick" />
+            <Button DockPanel.Dock="Right"
+                    Content="重新识别"
+                    Height="30"
+                    Padding="11,0"
+                    Margin="0,0,7,0"
+                    ToolTip="使用增强图像重新识别 (Ctrl+R)"
+                    Click="OnReRecognizeClick" />
           </DockPanel>
 
           <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,11">

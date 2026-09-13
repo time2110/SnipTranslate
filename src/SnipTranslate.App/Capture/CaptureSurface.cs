@@ -14,7 +14,7 @@ internal sealed class CaptureSurface : FrameworkElement
     private const double HandleSize = 7;
     private readonly BitmapSource _bitmap;
     private readonly DrawingRectangle _displayBounds;
-    private readonly IReadOnlyList<DrawingRectangle> _windowTargets;
+    private readonly WindowTargetService _windowTargets;
     private Point _anchor;
     private Point _pointer;
     private Rect _startSelection;
@@ -31,8 +31,9 @@ internal sealed class CaptureSurface : FrameworkElement
     private bool _pointerOverlayVisible = true;
     private Rect? _hoverTarget;
     private Rect? _pressedTarget;
+    private int _snapLevel;
 
-    internal CaptureSurface(BitmapSource bitmap, DrawingRectangle displayBounds, IReadOnlyList<DrawingRectangle> windowTargets)
+    internal CaptureSurface(BitmapSource bitmap, DrawingRectangle displayBounds, WindowTargetService windowTargets)
     {
         _bitmap = bitmap;
         _displayBounds = displayBounds;
@@ -86,7 +87,7 @@ internal sealed class CaptureSurface : FrameworkElement
 
         if (_dragOperation == DragOperation.None)
         {
-            _pressedTarget = FindWindowTarget(_pointer);
+            _pressedTarget = FindSnapTarget(_pointer);
             _dragOperation = DragOperation.New;
             _annotations.Clear();
             Selection = new Rect(_anchor, _anchor);
@@ -120,12 +121,26 @@ internal sealed class CaptureSurface : FrameworkElement
             if (_activeTool == AnnotationTool.Select)
             {
                 Cursor = CursorFor(HitTestOperation(_pointer));
-                if (Selection is null) _hoverTarget = FindWindowTarget(_pointer);
+                if (Selection is null) UpdateHoverTarget();
             }
         }
 
         InvalidateVisual();
         PointerOverlayChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    protected override void OnMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        if (_activeTool != AnnotationTool.Select || _dragging || Selection is not null)
+        {
+            return;
+        }
+
+        _snapLevel = Math.Clamp(_snapLevel + (e.Delta < 0 ? 1 : -1), 0, 2);
+        UpdateHoverTarget();
+        InvalidateVisual();
+        e.Handled = true;
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -220,6 +235,15 @@ internal sealed class CaptureSurface : FrameworkElement
     {
         InvalidateVisual();
         PointerOverlayChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal void RefreshSnapTarget()
+    {
+        if (Selection is null && _activeTool == AnnotationTool.Select)
+        {
+            UpdateHoverTarget();
+            InvalidateVisual();
+        }
     }
 
     internal void SetPointerOverlayVisible(bool visible)
@@ -377,7 +401,11 @@ internal sealed class CaptureSurface : FrameworkElement
         var accent = new SolidColorBrush(Color.FromRgb(56, 189, 248));
         drawingContext.DrawRectangle(null, new Pen(accent, Selection is null ? 1 : 1.5), selection);
 
-        if (Selection is null) return;
+        if (Selection is null)
+        {
+            DrawSnapLevelLabel(drawingContext, selection);
+            return;
+        }
 
         drawingContext.PushClip(new RectangleGeometry(selection));
         foreach (var annotation in _annotations)
@@ -400,13 +428,53 @@ internal sealed class CaptureSurface : FrameworkElement
         DrawSizeLabel(drawingContext, selection);
     }
 
-    private Rect? FindWindowTarget(Point point)
+    private void UpdateHoverTarget()
+    {
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        {
+            _hoverTarget = null;
+            return;
+        }
+
+        _hoverTarget = FindSnapTarget(_pointer);
+        if (_snapLevel != 0) return;
+        var global = GlobalPoint(_pointer);
+        _windowTargets.WarmControlsAt(global, () => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (Selection is null && _activeTool == AnnotationTool.Select &&
+                !Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+            {
+                _hoverTarget = FindSnapTarget(_pointer);
+                InvalidateVisual();
+            }
+        })));
+    }
+
+    private Rect? FindSnapTarget(Point point)
     {
         if (ActualWidth <= 0 || ActualHeight <= 0) return null;
-        var globalX = _displayBounds.Left + point.X * _bitmap.PixelWidth / ActualWidth;
-        var globalY = _displayBounds.Top + point.Y * _bitmap.PixelHeight / ActualHeight;
-        var target = _windowTargets.FirstOrDefault(rectangle => rectangle.Contains((int)globalX, (int)globalY));
-        if (target.Width <= 0 || target.Height <= 0) return null;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) return null;
+        if (_snapLevel == 2) return new Rect(0, 0, ActualWidth, ActualHeight);
+
+        var global = GlobalPoint(point);
+        var window = _windowTargets.WindowAt(global);
+        if (window is null) return null;
+        var target = window.Bounds;
+        if (_snapLevel == 0 && _windowTargets.TryGetControls(window.Handle, out var controls))
+        {
+            target = controls.FirstOrDefault(rectangle => rectangle.Contains(global));
+            if (target.Width <= 0 || target.Height <= 0) target = window.Bounds;
+        }
+
+        return ToLocalRect(target);
+    }
+
+    private System.Drawing.Point GlobalPoint(Point point) => new(
+        _displayBounds.Left + (int)Math.Round(point.X * _bitmap.PixelWidth / Math.Max(1, ActualWidth)),
+        _displayBounds.Top + (int)Math.Round(point.Y * _bitmap.PixelHeight / Math.Max(1, ActualHeight)));
+
+    private Rect? ToLocalRect(DrawingRectangle target)
+    {
         var clipped = DrawingRectangle.Intersect(target, _displayBounds);
         if (clipped.Width <= 0 || clipped.Height <= 0) return null;
         return new Rect(
@@ -414,6 +482,24 @@ internal sealed class CaptureSurface : FrameworkElement
             (clipped.Top - _displayBounds.Top) * ActualHeight / _bitmap.PixelHeight,
             clipped.Width * ActualWidth / _bitmap.PixelWidth,
             clipped.Height * ActualHeight / _bitmap.PixelHeight);
+    }
+
+    private void DrawSnapLevelLabel(DrawingContext context, Rect selection)
+    {
+        var label = _snapLevel switch { 0 => "控件", 1 => "窗口", _ => "屏幕" };
+        var formatted = new FormattedText(
+            label,
+            CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            new Typeface("Segoe UI Semibold"),
+            12,
+            Brushes.White,
+            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        var x = Math.Clamp(selection.Left + 5, 4, Math.Max(4, ActualWidth - formatted.Width - 16));
+        var y = Math.Clamp(selection.Top + 5, 4, Math.Max(4, ActualHeight - formatted.Height - 12));
+        var background = new Rect(x - 5, y - 3, formatted.Width + 10, formatted.Height + 6);
+        context.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(210, 15, 23, 42)), null, background, 4, 4);
+        context.DrawText(formatted, new Point(x, y));
     }
 
     internal void RenderPointerOverlay(DrawingContext drawingContext)

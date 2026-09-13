@@ -4,6 +4,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Get-Sha256([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '')
+        }
+        finally {
+            $sha.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 $models = @(
     @{
         Name = 'ch_PP-OCRv5_mobile_det.onnx'
@@ -40,6 +56,16 @@ $models = @(
         Name = 'ppocrv5_korean_dict.txt'
         Url = 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile/ppocrv5_korean_dict.txt'
         Sha256 = 'A88071C68C01707489BAA79EBE0405B7BEB5CCA229F4FC94CC3EF992328802D7'
+    },
+    @{
+        Name = 'ch_PP-OCRv5_det_server.onnx'
+        Url = 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/det/ch_PP-OCRv5_det_server.onnx'
+        Sha256 = '0F8846B1D4BBA223A2A2F9D9B44022FBC22CC019051A602B41A7FDA9667E4CAD'
+    },
+    @{
+        Name = 'ch_PP-OCRv5_rec_server.onnx'
+        Url = 'https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/rec/ch_PP-OCRv5_rec_server.onnx'
+        Sha256 = 'E09385400EAAAEF34CEFF54AEB7C4F0F1FE014C27FA8B9905D4709B65746562A'
     }
 )
 
@@ -48,7 +74,7 @@ New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 foreach ($model in $models) {
     $target = Join-Path $Destination $model.Name
     if (Test-Path -LiteralPath $target) {
-        $existingHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+        $existingHash = Get-Sha256 $target
         if ($existingHash -eq $model.Sha256) {
             Write-Host "Already present and verified: $($model.Name)"
             continue
@@ -59,7 +85,7 @@ foreach ($model in $models) {
     Write-Host "Downloading: $($model.Name)"
     Invoke-WebRequest -Uri $url -OutFile $target
 
-    $downloadedHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+    $downloadedHash = Get-Sha256 $target
     if ($downloadedHash -ne $model.Sha256) {
         throw "Model checksum verification failed: $($model.Name)"
     }

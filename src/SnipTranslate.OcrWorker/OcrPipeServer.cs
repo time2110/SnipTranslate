@@ -53,7 +53,7 @@ internal static class OcrPipeServer
             }
             catch (Exception exception)
             {
-                response = new OcrResponse(string.Empty, false, string.Empty, exception.Message, 0);
+                response = new OcrResponse(string.Empty, false, string.Empty, exception.Message, 0, 0);
             }
 
             await writer.WriteLineAsync(JsonSerializer.Serialize(response));

@@ -48,7 +48,8 @@ internal sealed record HotkeySettings(
 
 internal sealed record OcrSettings(
     string Language,
-    bool EnableAngleDetection);
+    bool EnableAngleDetection,
+    string Quality);
 
 internal sealed record AppSettings(
     ProxySettings Proxy,
@@ -68,7 +69,7 @@ internal sealed record AppSettings(
                 CreateDefaultProvider(TranslationProviderKind.MyMemory)
             }),
         new HotkeySettings(0, 0x70, 0x0002, 0x70),
-        new OcrSettings("auto", true));
+        new OcrSettings("auto", true, "fast"));
 
     internal static TranslationProviderSettings CreateDefaultProvider(TranslationProviderKind kind) => new(
         Guid.NewGuid().ToString("N"),

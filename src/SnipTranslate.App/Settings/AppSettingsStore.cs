@@ -41,7 +41,7 @@ internal sealed class AppSettingsStore
             storedProfiles,
             settings.Hotkeys.CaptureModifiers, settings.Hotkeys.CaptureVirtualKey,
             settings.Hotkeys.TranslateModifiers, settings.Hotkeys.TranslateVirtualKey,
-            settings.Ocr.Language, settings.Ocr.EnableAngleDetection);
+            settings.Ocr.Language, settings.Ocr.EnableAngleDetection, settings.Ocr.Quality);
 
         var json = JsonSerializer.Serialize(stored, new JsonSerializerOptions { WriteIndented = true });
         var temporaryPath = _path + ".tmp";
@@ -72,7 +72,8 @@ internal sealed class AppSettingsStore
                     stored.TranslateHotkeyVirtualKey == 0 ? AppSettings.Default.Hotkeys.TranslateVirtualKey : stored.TranslateHotkeyVirtualKey),
                 new OcrSettings(
                     string.IsNullOrWhiteSpace(stored.OcrLanguage) ? "auto" : stored.OcrLanguage,
-                    stored.EnableOcrAngleDetection));
+                    stored.EnableOcrAngleDetection,
+                    stored.OcrQuality is "accurate" ? "accurate" : "fast"));
         }
         catch (Exception) when (File.Exists(_path))
         {
@@ -154,7 +155,8 @@ internal sealed class AppSettingsStore
         uint TranslateHotkeyModifiers = 0x0002,
         uint TranslateHotkeyVirtualKey = 0x70,
         string OcrLanguage = "auto",
-        bool EnableOcrAngleDetection = true);
+        bool EnableOcrAngleDetection = true,
+        string OcrQuality = "fast");
 
     private sealed record StoredTranslationProvider(
         string Id,
