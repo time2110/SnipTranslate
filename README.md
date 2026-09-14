@@ -63,15 +63,17 @@ Windows 原生的极速截图、贴图、OCR 与翻译工具。
 一条命令生成自包含的 Windows x64 安装程序：
 
 ```powershell
-.\scripts\Package.ps1
-```
-
-如果 PowerShell 提示系统禁止运行脚本，使用无需修改系统策略的入口：
-
-```powershell
 .\scripts\Package.cmd
 ```
 
+也可显式地为当前进程绕过 PowerShell 执行策略：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Package.ps1
+```
+
 详细说明见 [安装包制作与使用](docs/安装包制作与使用.md)。
+
+开发过程中的 Windows、OCR、翻译与打包问题见 [技术难点与兼容性问题复盘](docs/技术难点与兼容性问题.md)。
 
 模型来源：[RapidAI/RapidOCRCSharp](https://github.com/RapidAI/RapidOCRCSharp)，许可证见上游项目。
